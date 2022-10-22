@@ -8,11 +8,11 @@ def get_model(num_inputs, units=50, seq_length=5):
   return model
 
 
-def get_auto_encoder(num_inputs, units=[64,64], seq_length=5):
+def get_auto_encoder(num_inputs, units=[64,64], seq_length=5, stateful = False):
   print(num_inputs)
   #input("enter to move on...")
   model = tf.keras.Sequential()
-  model.add(tf.keras.layers.LSTM(units[0], input_shape=(seq_length, num_inputs)))
+  model.add(tf.keras.layers.LSTM(units[0], input_shape=(None, num_inputs), stateful=stateful)) # seq_length
   model.add(tf.keras.layers.Dropout(rate=0.2))
   #model.add(tf.keras.layers.LSTM(units[1], return_sequences=False)) 
   # to use this layer, set return sequence = True in the previous LSTM layer

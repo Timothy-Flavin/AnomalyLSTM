@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from DataLoader import InfoType, read_as_data_frame, ip_to_numpy, eth_to_numpy, join_columns, make_sequence, normalize
+from DataLoader import InfoType, read_as_data_frame
+from DataLoader import ip_to_numpy, eth_to_numpy, join_columns
+from DataLoader import make_supervised_sequence, make_unsupervised_sequence 
+from DataLoader import normalize
 from LSTM import get_model, get_auto_encoder
 from PrinterDataLoader import read_printer_as_df, max_normalize, protocols_to_dummy
 import tensorflow as tf
@@ -28,7 +31,6 @@ printer_cols = [
   InfoType("ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
   InfoType("protocol",i_len=12, used=True, transform=protocols_to_dummy),
   InfoType("version"),
-  InfoType("label"),
 ]
 
 # subset_by_label means that we will get only the data with the desired label
@@ -53,7 +55,7 @@ def get_modbus_data(cols, filename, seq_length, train_prop, subset_by_label=-1, 
   data = join_columns(data_frame,cols)
   #print(f"Printing modbus data: {data}")
   scal, data = normalize(data)
-  seq_data, seq_labels = make_sequence(data, seq_length)
+  seq_data, seq_labels = make_supervised_sequence(data, seq_length)
 
   x_train = seq_data[:int(train_prop*seq_data.shape[0]),:,:]
   x_test = seq_data[int(train_prop*seq_data.shape[0]):,:,:]
@@ -79,12 +81,17 @@ def get_printer_data(cols, seq_length, train_prop, subset_by_label=-1, verbose=F
   data = join_columns(data_frame,cols)
   #print(f"Printing modbus data: {data}")
   data = max_normalize(data)
-  seq_data, seq_labels = make_sequence(data, seq_length)
+  print(data.shape)
+  print(data[0:10,0:10])
+  seq_data = make_unsupervised_sequence(data, seq_length)
+  print(seq_data.shape)
+  print(seq_data[0,0:10,0:10])
+  input("Is this the right shape?")
 
   x_train = seq_data[:int(train_prop*seq_data.shape[0]),:,:]
   x_test = seq_data[int(train_prop*seq_data.shape[0]):,:,:]
-  y_train = seq_labels[:int(train_prop*seq_labels.shape[0]),]
-  y_test = seq_labels[int(train_prop*seq_labels.shape[0]):,]
+  y_train = None#seq_labels[:int(train_prop*seq_labels.shape[0]),]
+  y_test = None#seq_labels[int(train_prop*seq_labels.shape[0]):,]
 
   return x_train, y_train, x_test, y_test
 
@@ -199,7 +206,7 @@ def unsupervised_learn(seq_length=10, train_prop=0.8):
     print(f"True Positives: {test_errors[test_errors>l_mean+i*l_std].shape}")
     print(f"False Positives: {train_errors[train_errors>l_mean+i*l_std].shape}")
     print(f"False Negatives: {test_errors[test_errors<l_mean+i*l_std].shape}")
-  input()
+  input("'enter' to see some test results and a graph...")
 
   train_w = np.empty(train_errors.shape)
   train_w.fill(1/train_errors.shape[0])
@@ -221,4 +228,21 @@ def unsupervised_learn(seq_length=10, train_prop=0.8):
   mae2 = tf.keras.losses.mean_absolute_error(x_test, model.predict(x_test))
   print(mae2[:,-1])
   print([mae1,np.mean(mae2)])
-unsupervised_learn()
+
+  return model, mae1, x_train, x_test
+
+model, mae, train_data, test_data = unsupervised_learn()
+
+def shap_model(data):
+  return tf.keras.losses.mean_absolute_error(data, model.predict(data))[:,-1]
+
+import shap
+
+input("Time to try shapely values")
+print(train_data.shape)
+# use Kernel SHAP to explain test set predictions
+explainer = shap.KernelExplainer(shap_model, train_data, link="identity")
+shap_values = explainer.shap_values(test_data, nsamples=100)
+
+# plot the SHAP values for the Setosa output of the first instance
+shap.force_plot(explainer.expected_value[0], shap_values[0][0,:], train_data.iloc[0,:], link="logit")
