@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 # Get the data as a pandas dataframe
-def read_as_data_frame(fileName, verbose=False):
+def modbus_to_data_frame(fileName, verbose=False):
   data = pd.read_csv("Data/"+fileName+".csv",index_col=0).fillna(0)
   #data = data.astype("float32")
   if verbose:
@@ -177,7 +177,6 @@ def make_unsupervised_sequence(data, seq_len):
   # initialize zero matrix of (n-k, k, p) shape to store the n-k number
   # of sequences of k-length and zero array of (n-k, 1) to store targets
   X_data = np.zeros([data.shape[0]-seq_len, seq_len, data.shape[1]])
-  y_data = []
   
   # run loop to slice k-number of previous rows as 1 sequence to predict
   # 1 target and save them to X_data matrix and y_data list

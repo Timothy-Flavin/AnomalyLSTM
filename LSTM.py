@@ -24,3 +24,4 @@ def get_auto_encoder(num_inputs, units=[64,64], seq_length=5, stateful = False):
   model.compile(optimizer='adam', loss='mae')
   model.summary()
   return model
+

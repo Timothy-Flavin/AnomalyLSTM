@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from DataLoader import InfoType, read_as_data_frame
+from DataLoader import InfoType, modbus_to_data_frame
 from DataLoader import ip_to_numpy, eth_to_numpy, join_columns
-from DataLoader import make_supervised_sequence, make_unsupervised_sequence 
+from DataLoader import make_supervised_sequence
 from DataLoader import normalize
+from Interpretability import compare_acc, LIME
 from LSTM import get_model, get_auto_encoder
 from PrinterDataLoader import read_printer_as_df, max_normalize, protocols_to_dummy
 import tensorflow as tf
@@ -22,6 +23,7 @@ moving_two_files_cols = [
   InfoType("label")
 ]
 
+# Setup for printer conncting unknown IP data
 #"len","ethernet_dst","ethernet_src","ipv4_dst","ipv4_src","protocol","version"
 printer_cols = [
   InfoType("len"),
@@ -31,15 +33,18 @@ printer_cols = [
   InfoType("ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
   InfoType("protocol",i_len=12, used=True, transform=protocols_to_dummy),
   InfoType("version"),
+  InfoType("label"),
 ]
 
-# subset_by_label means that we will get only the data with the desired label
-# This is so we can test the unsupervised learner by training it to encode and
-# decode normal data and then compare it's ability to decode with that of the 
-# anomolous data. This way we can give a model normal real world data with some
-# idea of whether it will detect anomolies 
 def get_modbus_data(cols, filename, seq_length, train_prop, subset_by_label=-1, verbose=False):
-  data_frame = read_as_data_frame(filename)
+  """
+  subset_by_label means that we will get only the data with the desired label
+  This is so we can test the unsupervised learner by training it to encode and
+  decode normal data and then compare it's ability to decode with that of the 
+  anomolous data. This way we can give a model normal real world data with some
+  idea of whether it will detect anomolies 
+  """
+  data_frame = modbus_to_data_frame(filename)
 
   if subset_by_label == 1:
     data_frame = data_frame.loc[data_frame.iloc[:,-1] == 1]
@@ -80,75 +85,73 @@ def get_printer_data(cols, seq_length, train_prop, subset_by_label=-1, verbose=F
 
   data = join_columns(data_frame,cols)
   #print(f"Printing modbus data: {data}")
-  data = max_normalize(data)
+  data,maxes = max_normalize(data)
   print(data.shape)
   print(data[0:10,0:10])
-  seq_data = make_unsupervised_sequence(data, seq_length)
+  seq_data, seq_labels = make_supervised_sequence(data, seq_length)
   print(seq_data.shape)
   print(seq_data[0,0:10,0:10])
   input("Is this the right shape?")
 
   x_train = seq_data[:int(train_prop*seq_data.shape[0]),:,:]
   x_test = seq_data[int(train_prop*seq_data.shape[0]):,:,:]
-  y_train = None#seq_labels[:int(train_prop*seq_labels.shape[0]),]
-  y_test = None#seq_labels[int(train_prop*seq_labels.shape[0]):,]
+  y_train = seq_labels[:int(train_prop*seq_labels.shape[0]),]
+  y_test = seq_labels[int(train_prop*seq_labels.shape[0]):,]
 
   return x_train, y_train, x_test, y_test
 
-def compare_acc(pred, y):
-  num_right=0
-  num=0
-  for i in range(y.shape[0]):
-    if abs(pred[i]-y[i])<0.5:
-      num_right+=1
-    num+=1
-  return num_right/num
+def supervised_learn(seq_length = 30, train_prop = 0.8, units=100, verbose=False):
+  """
+  Creates a bastic LSTM which learns to classify data as malicious or not
+  based on labeled data. 
 
-def supervised_learn():
-  seq_length = 30
-  train_prop = 0.8
+  Inputs: 
+    seq_length: in order to train in parallel, the model is set to stateless and
+                fed sequences of fixed length to take advantage of parallel 
+                architectures for training. this is the length of those fixed
+                sequences. longer is more realistic but will allow for fewer 
+                training examples so more likely to overfit. 
+    train_prop: proportion of the data to be used for trianing from 0 to 1.0
+    units: Number of LSTM units. More units can learn more complicated functions.
+           More units also increase the likelihood of overfitting.
+    verbose: if True this function will print some information
+    x_train: the training data in chunks of sequence length.
+    y_train: the labels, a binary classification
+    x_test: '' ''
+    y_test: '' '' 
+
+  Outputs:
+    model: the trained LSTM expecting complete sequences
+    history: the keras model history
+    train_acc: training accuracy
+    test_acc: testing accuracy
+  """
+  
   x_train, y_train, x_test, y_test = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop)
-  print(f"Sequence data shape: x {x_train.shape}, y {y_train.shape}")
-  model = get_model(num_inputs=x_train.shape[2], units=100, seq_length=seq_length)
-
-  print(f"Ready to train, np array contains nans? x: {np.isnan(x_train).any()}, y: {np.isnan(y_train).any()}")
-  #print(x_train)
-  #print(np.sum(y_train))
+  
+  if verbose:
+    print(f"Sequence data shape: x {x_train.shape}, y {y_train.shape}")
+  model = get_model(num_inputs=x_train.shape[2], units=units, seq_length=seq_length)
+  
+  if verbose:
+    print(f"Ready to train, np array contains nans? x: {np.isnan(x_train).any()}, y: {np.isnan(y_train).any()}")
   history = model.fit(x=x_train,y=y_train,epochs=5,validation_data=(x_test, y_test))
 
   pred = model.predict(x_train)
-  print(pred)
-  print(f"Accuracy on train: {compare_acc(pred, y_train)}")
+  if verbose:
+    print(pred)
+    print(f"Accuracy on train: {compare_acc(pred, y_train)}")
   pred = model.predict(x_test)
-  print(f"Accuracy on test: {compare_acc(pred, y_test)}")
+  if verbose:
+    print(f"Accuracy on test: {compare_acc(pred, y_test)}")
 
   train_acc = compare_acc(model.predict(x_train),y_train)
   test_acc = compare_acc(model.predict(x_test),y_test)
 
-  importance = {}
+  return model, history, train_acc, test_acc
 
-  for i in range(len(moving_two_files_cols)-1):
-    for j,c in enumerate(moving_two_files_cols):
-      if i==j:
-        c.InfoType_used = False
-      else:
-        c.InfoType_used = True
-    x_train, y_train, x_test, y_test = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop)
-    pred = model.predict(x_train)
-    temp_train_acc = compare_acc(model.predict(x_train),y_train)
-    temp_test_acc = compare_acc(model.predict(x_test),y_test)
-    print(f"Testing accuracy with {moving_two_files_cols[i].InfoType_name} set to 0")
-    print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
-    pred = model.predict(x_test)
-    print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
-    importance[moving_two_files_cols[i].InfoType_name] = -1*(temp_train_acc - train_acc + temp_test_acc - test_acc)/2.0
 
-  names = list(importance.keys())
-  values = list(importance.values())
 
-  plt.bar(range(len(importance)), values, tick_label=names)
-  plt.xticks(rotation = 45)
-  plt.show()
 
 def unsupervised_learn(seq_length=10, train_prop=0.8):
   print("Now performing unsupervised learning")
@@ -232,17 +235,3 @@ def unsupervised_learn(seq_length=10, train_prop=0.8):
   return model, mae1, x_train, x_test
 
 model, mae, train_data, test_data = unsupervised_learn()
-
-def shap_model(data):
-  return tf.keras.losses.mean_absolute_error(data, model.predict(data))[:,-1]
-
-import shap
-
-input("Time to try shapely values")
-print(train_data.shape)
-# use Kernel SHAP to explain test set predictions
-explainer = shap.KernelExplainer(shap_model, train_data, link="identity")
-shap_values = explainer.shap_values(test_data, nsamples=100)
-
-# plot the SHAP values for the Setosa output of the first instance
-shap.force_plot(explainer.expected_value[0], shap_values[0][0,:], train_data.iloc[0,:], link="logit")

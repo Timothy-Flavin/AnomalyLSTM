@@ -6,8 +6,11 @@ import numpy as np
 from DataLoader import eth_to_numpy, ip_to_numpy
 
 # Version is either 0 for ipv4 or 1 for ipv6
-def read_printer_as_df():
-  raw_table = pd.read_csv("Data/PrinterPackets.csv").fillna('')
+def read_printer_as_df(path="Data/PrinterPackets.csv"):
+  """
+  Reads the printer data csv 
+  """
+  raw_table = pd.read_csv(path).fillna('')
   clean_table = pd.DataFrame(columns=["len","ethernet_dst","ethernet_src","ipv4_dst","ipv4_src","protocol","version","label"])
   skipped=[]
   for i,row in raw_table.iterrows():
@@ -75,22 +78,47 @@ def read_printer_as_df():
 
 
 def max_normalize(dat):
+  """
+  Normalizes the data by dividing by the max value of
+  each column to move the data between 0.0 and 1.0.
+
+  Inputs:
+    dat: a numpy array numeric
+  Outputs: 
+    dat: that array, scaled
+    maxes: the numbers that it was scaled by so that
+           it can be un-scaled to enterpret the output 
+           later. 
+
+  This helps neural networks learn and it makes it so
+  that all the features have the same importance initially
+  """
   maxes=np.max(dat,axis=0)
   for i in range(maxes.shape[0]):
     if maxes[i]==0:
       maxes[i]=0.001
   dat = dat/maxes
-  #print("Normalized: ")
-  #print(dat)
-  return dat
+  return dat, maxes
 
 def protocols_to_dummy(prot):
-  prot = pd.DataFrame(prot)
-  #print(prot.head())
-  #print(prot.iat[0,0])
-  #print(prot.iat[1,0])
-  #print(prot.iat[2,0])
+  """
+  Turns the protocols I could find into dummy variables.
+  This is a one hot encoding
 
+  Inputs: 
+    prot: a column of a dataframe that is the 'Protocol'
+          attribute from wireshark. Should be a list of
+          strings.
+  Output:
+    dummy_arr: a numpy array with as many columns as there
+               are protocols in "prots". if column '1' is
+               'ARP' then all of the packets that use the
+               'ARP' protocol will have column 1 = 1.0 and
+               for those rows, all other protocol columns
+               will be 0. This is a one-hot-coding
+  """
+
+  prot = pd.DataFrame(prot)
   prots = ["ARP",  "BROWSER",  "DHCP",  "DHCPv6",  "ICMP",  "ICMPv6",  "LLDP",  "LLMNR",  "MDNS",  "MQTT",  "TCP",  "OTHER"]
   dummy_arr = np.zeros((len(prot.index),len(prots)))
   for i in range(len(prot.index)):
@@ -98,7 +126,4 @@ def protocols_to_dummy(prot):
       dummy_arr[i,indexOf(prots,prot.iat[i,0])] = 1
     else:
       dummy_arr[i,-1]=1
-  #print(dummy_arr[0:3,:])
-  #prot = pd.get_dummies(prot,columns=['protocol'])
-  #prot["OTHER"] = 0
   return dummy_arr
