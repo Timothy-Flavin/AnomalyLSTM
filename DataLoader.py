@@ -297,7 +297,7 @@ def make_supervised_sequence(data, seq_len, whole_seq_bad=False):
   
   return X_data, np.asarray(y_data)
 
-def get_modbus_data(cols, file_name, seq_length, train_prop, subset_by_label=-1, maxes=None, verbose=False):
+def get_modbus_data(cols, file_name, seq_length, train_prop, subset_by_label=-1, maxes=None, supervised=True, whole_seq_bad = False, verbose=False):
   """
   subset_by_label means that we will get only the data with the desired label
   This is so we can test the unsupervised learner by training it to encode and

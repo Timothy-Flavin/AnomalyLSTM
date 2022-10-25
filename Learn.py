@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from LSTM import get_model, get_auto_encoder
 from Interpretability import compare_acc
 
-def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_prop = 0.8, units=100, epochs=5, verbose=False):
+def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_prop = 0.8, units=100, epochs=5, model=None, verbose=False):
   """
   Creates a bastic LSTM which learns to classify data as malicious or not
   based on labeled data. 
@@ -34,7 +34,9 @@ def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_pr
   
   if verbose:
     print(f"Sequence data shape: x {x_train.shape}, y {y_train.shape}")
-  model = get_model(num_inputs=x_train.shape[2], units=units, seq_length=seq_length)
+
+  if model==None:
+    model = get_model(num_inputs=x_train.shape[2], units=units, seq_length=seq_length)
   
   if verbose:
     print(f"Ready to train, np array contains nans? x: {np.isnan(x_train).any()}, y: {np.isnan(y_train).any()}")
@@ -53,11 +55,12 @@ def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_pr
 
   return model, history, train_acc, test_acc
 
-def unsupervised_learn(x_train, x_val, x_test, seq_length=10, units=[64,64], epochs=100):
+def unsupervised_learn(x_train, x_val, x_test, seq_length=10, units=[64,64], epochs=100, model=None):
   print("Now performing unsupervised learning")
   print(f"x train shape: {x_train.shape}, x val shape: {x_val.shape}, x test shape: {x_test.shape} ")
   #input("Hit enter to train")
-  model = get_auto_encoder(num_inputs=x_train.shape[2], units=units, seq_length=seq_length)
+  if model==None:
+    model = get_auto_encoder(num_inputs=x_train.shape[2], units=units, seq_length=seq_length)
 
   print(f"Ready to train. np array contains nans? x: {np.isnan(x_train).any()}, y: {np.isnan(x_val).any()}")
   #print(x_train)
