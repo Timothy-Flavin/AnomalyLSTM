@@ -25,8 +25,8 @@ moving_two_files_cols = [
   InfoType("ethernet_src",i_len=6, used=True, transform=eth_to_numpy),
   InfoType("ethernet_ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
   InfoType("ethernet_ipv4_dst",i_len=4, used=True, transform=ip_to_numpy),
-  InfoType("ethernet_ipv4_tcp_srcport", used=False),
-  InfoType("ethernet_ipv4_tcp_dstport", used=False),
+  InfoType("ethernet_ipv4_tcp_srcport", used=True),
+  InfoType("ethernet_ipv4_tcp_dstport", used=True),
   InfoType("label")
 ]
 
@@ -38,11 +38,30 @@ printer_cols = [
   InfoType("ethernet_src",i_len=6, used=True, transform=eth_to_numpy),
   InfoType("ipv4_dst",i_len=4, used=True, transform=ip_to_numpy),
   InfoType("ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
-  InfoType("protocol",i_len=12, used=False, transform=protocols_to_dummy),
-  InfoType("version", used=False),
+  InfoType("protocol",i_len=12, used=True, transform=protocols_to_dummy),
+  InfoType("version", used=True),
   InfoType("label"),
 ]
 
+moving_two_files_cols = [
+  InfoType("len"),
+  InfoType("ethernet_dst",i_len=6, used=True, transform=eth_to_numpy),
+  InfoType("ethernet_src",i_len=6, used=True, transform=eth_to_numpy),
+  InfoType("ethernet_ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
+  InfoType("ethernet_ipv4_dst",i_len=4, used=True, transform=ip_to_numpy),
+  InfoType("label")
+]
+
+# Setup for printer conncting unknown IP data
+#"len","ethernet_dst","ethernet_src","ipv4_dst","ipv4_src","protocol","version"
+printer_cols = [
+  InfoType("len"),
+  InfoType("ethernet_dst",i_len=6, used=True, transform=eth_to_numpy),
+  InfoType("ethernet_src",i_len=6, used=True, transform=eth_to_numpy),
+  InfoType("ipv4_dst",i_len=4, used=True, transform=ip_to_numpy),
+  InfoType("ipv4_src",i_len=4, used=True, transform=ip_to_numpy),
+  InfoType("label"),
+]
 
 
 def printer_unsupervised(model=None, train_l=None, val_l=None, test_l=None, lime=False, shapely=False):
