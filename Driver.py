@@ -51,19 +51,25 @@ seq_length=10
 train_prop=0.8
 train_x, train_y, val_x, val_y, df, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=True, verbose=False)
 #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
+print(f"x shape train: {train_x.shape}, val: {val_x.shape}")
+
 # need to remove sequences with label = 1 from train
 # and val because those are the unknown IPs and will 
 # used to see how the model does on bad packets. 
-badbois=np.where(train_y>0)[0]
-badbois2 = np.where(val_y>0)[0] 
-for i in range(len(badbois)):
-  print(i)
-  print(badbois[i])
-print(df.iloc[badbois+seq_length-1].head(50))
-print(df.iloc[badbois2+seq_length-1 + train_y.shape[0] + seq_length])
-input("move on?")
+badpacs = np.where(train_y>0)[0] # get unknown packets from train
+badpacs2 = np.where(val_y>0)[0] # get unknown packets from val
+goodpacs = np.where(train_y<1)[0] # get known packets from train
+goodpacs2 = np.where(val_y<1)[0] # get known packets from val
+
+
+test_x = np.concatenate((train_x[badpacs], val_x[badpacs2]), axis=0)
+train_x = train_x[goodpacs]
+val_x = val_x[goodpacs2]
+
+print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.shape}")
+
 model, train_l, val_l, test_l = unsupervised_learn(train_x,val_x,test_x, seq_length, [64,64], 100)
 unsupervised_results(model, train_x, test_x, train_l, val_l, test_l)
-LIME(model, printer_cols, get_printer_data, seq_length, train_prop, file_name="")
+LIME(model, printer_cols, get_printer_data, seq_length, train_prop, file_name="Data/PrinterPackets.csv", supervised=False)
 
 # for supervised, file_name = "moving_two_files_modbus_6RTU"
