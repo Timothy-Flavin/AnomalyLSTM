@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
-
+import random
 
 def get_errors(model, data):
   """
@@ -163,3 +163,76 @@ def unsupervised_results(model, x_train, x_test, train_l, val_l, test_l):
   mae2 = tf.keras.losses.mean_absolute_error(x_test, model.predict(x_test))
   #print(mae2[:,-1])
   #print([mae1,np.mean(mae2)])
+
+
+def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, supervised=True, n_stdv=2, n_samps = 1000):
+  importance = {}
+
+  ox_train, oy_train, ox_test, oy_test, df, maxes = get_data(col_info, file_name, seq_length, train_prop)
+  for c in col_info:
+    c.InfoType_used = False
+  # getting accuracy with all features as a baseline
+  #printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=True, verbose=False
+  x_train, y_train, x_test, y_test, df, maxes = get_data(col_info, file_name, seq_length, train_prop)
+  print(f"x shape in Shapely train: {x_train.shape}, val: {x_test.shape}")
+  train_acc=0
+  test_acc=0
+  errors=0
+  mean=0
+  stdv=0
+  if supervised:
+    o_train_acc = compare_acc(model.predict(x_train),y_train)
+    o_test_acc = compare_acc(model.predict(x_test),y_test)
+  else:
+    errors, mean, stdv = get_errors(model, x_train)
+    best_error, mean, stdv = get_errors(model, ox_train)
+    test_errors, _1, _2 = get_errors(model, x_test)
+    o_train_acc = compare_acc_unsupervised(errors, mean, stdv*n_stdv,y_train)
+    o_test_acc = compare_acc_unsupervised(test_errors, mean, stdv*n_stdv,y_test)
+
+  for n in range(n_samps):
+    print(importance)
+    
+    # create a random ordering of the features and set them all to false
+    train_acc = o_train_acc
+    test_acc - o_test_acc
+    features_permute = list(range(0,len(col_info)))
+    random.shuffle(features_permute)
+    print(features_permute)
+    input(f"hit enter to increment shapely value {n}")
+    for c in col_info:
+      c.InfoType_used = False
+    # we always want the label to be true  
+    col_info[-1].InfoType_used = True
+    for i in features_permute:
+      # skip the label attribute
+      if i==len(col_info)-1:
+        continue
+      for j,c in enumerate(col_info):
+        if i==j:
+          c.InfoType_used = True
+      x_train, y_train, x_test, y_test, tdf, tmaxes = get_data(col_info, file_name, seq_length, train_prop)
+      temp_train_acc=0
+      temp_test_acc=0
+      if supervised:
+        temp_train_acc = compare_acc(model.predict(x_train),y_train)
+        temp_test_acc = compare_acc(model.predict(x_test),y_test)
+      else:
+        temp_errors, temp_mean, temp_stdv = get_errors(model, x_train)
+        temp_test_errors, _1, _2 = get_errors(model, x_test)
+        temp_train_acc = compare_acc_unsupervised(temp_errors, mean, stdv*n_stdv,y_train)
+        temp_test_acc = compare_acc_unsupervised(temp_test_errors, mean, stdv*n_stdv,y_test)
+      for c in col_info:
+        print(f"name: {c.InfoType_name}, used: {c.InfoType_used}")
+      print(f"Testing accuracy with {col_info[i].InfoType_name} included")
+      print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
+      print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
+      importance[col_info[i].InfoType_name] = importance.get(col_info[i].InfoType_name,0)+(temp_train_acc - train_acc + temp_test_acc - test_acc)/2.0
+      train_acc = temp_train_acc
+      test_acc = temp_test_acc
+  names = list(importance.keys())
+  values = list(importance.values())
+
+  plt.bar(range(len(importance)), values, tick_label=names)
+  plt.xticks(rotation = 45)
+  plt.show()

@@ -9,7 +9,7 @@ from DataLoader import get_modbus_data, get_printer_data
 # Interpretability shows the results of the models 
 # in addition to some basic analysis on which features
 # lead to certain results. 
-from Interpretability import compare_acc, LIME, unsupervised_results
+from Interpretability import compare_acc, LIME, unsupervised_results, Shapely
 
 # Learn trains a model on data and returns the model 
 # and scores
@@ -71,5 +71,5 @@ print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.
 model, train_l, val_l, test_l = unsupervised_learn(train_x,val_x,test_x, seq_length, [64,64], 100)
 unsupervised_results(model, train_x, test_x, train_l, val_l, test_l)
 LIME(model, printer_cols, get_printer_data, seq_length, train_prop, file_name="Data/PrinterPackets.csv", supervised=False)
-
+Shapely(model, printer_cols, get_printer_data, seq_length, train_prop, file_name="Data/PrinterPackets.csv", supervised=False, n_samps=10)
 # for supervised, file_name = "moving_two_files_modbus_6RTU"
