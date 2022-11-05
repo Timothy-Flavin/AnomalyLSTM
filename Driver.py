@@ -43,6 +43,8 @@ printer_cols = [
   InfoType("label"),
 ]
 
+# overwriting the other definition to do transfer learning by making
+# the columns be the same as the printer data
 moving_two_files_cols = [
   InfoType("len"),
   InfoType("ethernet_dst",i_len=6, used=True, transform=eth_to_numpy),
@@ -65,28 +67,15 @@ printer_cols = [
 
 
 def printer_unsupervised(model=None, train_l=None, val_l=None, test_l=None, lime=False, shapely=False):
-  # We can ignore the labels here because we are training 
-  # the model to recreate x
   seq_length=10
   train_prop=0.8
-  train_x, train_y, val_x, val_y, df, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=False, verbose=False)
+  train_x, train_y, val_x, val_y, train_df, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=0, whole_seq_bad=False, verbose=False)
   #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
-  print(f"x shape train: {train_x.shape}, val: {val_x.shape}")
+  print(f"subset by label =0: x shape train: {train_x.shape}, val: {val_x.shape}")
+  test_x, test_y, _, _2, test_df, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=1, whole_seq_bad=False, maxes=maxes, verbose=False)
 
-  # need to remove sequences with label = 1 from train
-  # and val because those are the unknown IPs and will 
-  # used to see how the model does on bad packets. 
-  badpacs = np.where(train_y>0)[0] # get unknown packets from train
-  badpacs2 = np.where(val_y>0)[0] # get unknown packets from val
-  goodpacs = np.where(train_y<1)[0] # get known packets from train
-  goodpacs2 = np.where(val_y<1)[0] # get known packets from val
-
-
-  test_x = np.concatenate((train_x[badpacs], val_x[badpacs2]), axis=0)
-  train_x = train_x[goodpacs]
-  val_x = val_x[goodpacs2]
-
-  print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.shape}")
+  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
+  print(f"subset by label =1: x shape train: {test_x.shape}")
 
   model, train_l, val_l, test_l = unsupervised_learn(train_x,val_x,test_x, seq_length, [64,64], 100, model=model)
   unsupervised_results(model, train_x, test_x, train_l, val_l, test_l)
@@ -98,41 +87,21 @@ def printer_unsupervised(model=None, train_l=None, val_l=None, test_l=None, lime
   return model
 
 
-
-
-
-def modbus_unsupervised(model=None, train_l=None, val_l=None, test_l=None, lime=False, shapely=False):
-
+def modbus_unsupervised(model=None, lime=False, shapely=False, verbose=False):
+  """
+  This is basically an example for training a model and showing the results.
+  """
   seq_length=10
   train_prop=0.8
-  train_x, train_y, val_x, val_y, df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=False, verbose=False)
-  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
-  print(f"x shape train: {train_x.shape}, val: {val_x.shape}")
-
-  # need to remove sequences with label = 1 from train
-  # and val because those are the unknown IPs and will 
-  # used to see how the model does on bad packets. 
-  badpacs = np.where(train_y>0)[0] # get unknown packets from train
-  badpacs2 = np.where(val_y>0)[0] # get unknown packets from val
-  goodpacs = np.where(train_y<1)[0] # get known packets from train
-  goodpacs2 = np.where(val_y<1)[0] # get known packets from val
-
-  print(f"badpacks length: {badpacs.shape + badpacs2.shape}")
-
-  test_x = np.concatenate((train_x[badpacs], val_x[badpacs2]), axis=0)
-  train_x = train_x[goodpacs]
-  val_x = val_x[goodpacs2]
-
-  print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.shape} using old method")
-
-  train_x, train_y, val_x, val_y, df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=train_prop, subset_by_label=0, whole_seq_bad=False, verbose=True)
-  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
+  print("Modbus data:")
+  # Getting the non-malicious sequences
+  train_x, train_y, val_x, val_y, train_df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=train_prop, subset_by_label=0, whole_seq_bad=False, verbose=True)
   print(f"subset by label =0: x shape train: {train_x.shape}, val: {val_x.shape}")
-  train_x, train_y, val_x, val_y, df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=1.0, subset_by_label=1, whole_seq_bad=False, verbose=True)
-  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
-  print(f"subset by label =1: x shape train: {train_x.shape}, val: {val_x.shape}")
 
-  input("Did it work?")
+  # getting the sequences ending in a malicious packet
+  test_x, test_y, _, _2, test_df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, whole_seq_bad=False, verbose=True)
+  print(f"subset by label =1: x shape train: {test_x.shape}")
+
 
   model, train_l, val_l, test_l = unsupervised_learn(train_x,val_x,test_x, seq_length, [64,64], 100, model=model)
   unsupervised_results(model, train_x, test_x, train_l, val_l, test_l)

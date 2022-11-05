@@ -57,14 +57,22 @@ def compare_acc_unsupervised(errors, mean, deviation, labels):
     num+=1
   return num_right/num
 
-def LIME(model, col_info, get_data, seq_length, train_prop, file_name, supervised=True, n_stdv=2):
+def LIME(model, col_info, get_data, seq_length, train_prop, file_name, supervised=True, n_stdv=2, graph_output=False, verbose=False):
+  """Calculates the LIME values for this model. Basically 
+  gives an importance to each feature in the model This needs
+  labeled data to show which features make the model more
+  'accurate'. if the data is not labeled this doesn't make
+  much sense because more error is good for malicious packets
+  but bad for normal ones."""
+  
   importance = {}
 
   # getting accuracy with all features as a baseline
   #printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=True, verbose=False
   x_train, y_train, x_test, y_test, df, maxes = get_data(col_info, file_name, seq_length, train_prop)
   
-  print(f"x shape in LIME train: {x_train.shape}, val: {x_test.shape}")
+  if verbose:
+    print(f"x shape in LIME train: {x_train.shape}, val: {x_test.shape}")
   
   train_acc=0
   test_acc=0
@@ -75,12 +83,14 @@ def LIME(model, col_info, get_data, seq_length, train_prop, file_name, supervise
     train_acc = compare_acc(model.predict(x_train),y_train)
     test_acc = compare_acc(model.predict(x_test),y_test)
   else:
-    print("unsupervised LIME")
+    if verbose:
+      print("unsupervised LIME")
     errors, mean, stdv = get_errors(model, x_train)
     test_errors, _1, _2 = get_errors(model, x_test)
     train_acc = compare_acc_unsupervised(errors, mean, stdv*n_stdv,y_train)
     test_acc = compare_acc_unsupervised(test_errors, mean, stdv*n_stdv,y_test)
-    print(f"train accuracy: {train_acc}, test: {test_acc}")
+    if verbose:
+      print(f"train accuracy: {train_acc}, test: {test_acc}")
 
   for i in range(len(col_info)-1):
     for j,c in enumerate(col_info):
@@ -95,24 +105,30 @@ def LIME(model, col_info, get_data, seq_length, train_prop, file_name, supervise
       temp_train_acc = compare_acc(model.predict(x_train),y_train)
       temp_test_acc = compare_acc(model.predict(x_test),y_test)
     else:
-      print("unsupervised LIME")
+      if verbose:
+        print("unsupervised LIME")
       temp_errors, temp_mean, temp_stdv = get_errors(model, x_train)
       temp_test_errors, _1, _2 = get_errors(model, x_test)
       temp_train_acc = compare_acc_unsupervised(temp_errors, mean, stdv*n_stdv,y_train)
       temp_test_acc = compare_acc_unsupervised(temp_test_errors, mean, stdv*n_stdv,y_test)
-      print(f"temp train accuracy: {train_acc}, test: {test_acc}")
-    print(f"Testing accuracy with {col_info[i].InfoType_name} set to 0")
-    print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
-    print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
+      if verbose:
+        print(f"temp train accuracy: {train_acc}, test: {test_acc}")
+    
+    if verbose:
+      print(f"Testing accuracy with {col_info[i].InfoType_name} set to 0")
+      print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
+      print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
     importance[col_info[i].InfoType_name] = -1*(temp_train_acc - train_acc + temp_test_acc - test_acc)/2.0
 
-  names = list(importance.keys())
-  values = list(importance.values())
+  if graph_output:
+    names = list(importance.keys())
+    values = list(importance.values())
 
-  plt.bar(range(len(importance)), values, tick_label=names)
-  plt.xticks(rotation = 45)
-  plt.show()
+    plt.bar(range(len(importance)), values, tick_label=names)
+    plt.xticks(rotation = 45)
+    plt.show()
 
+  return importance
 
 def unsupervised_results(model, x_train, x_test, train_l, val_l, test_l):
   #print(train_l)
@@ -165,7 +181,37 @@ def unsupervised_results(model, x_train, x_test, train_l, val_l, test_l):
   #print([mae1,np.mean(mae2)])
 
 
-def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, supervised=True, n_stdv=2, n_samps = 1000):
+def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, supervised=True, n_stdv=2, n_samps = 1000, graph_output=False, verbose=False):
+  """This calculates the average shapely values for the model
+  accross a dataset. The shapely values also assign importance
+  to each feature, but they do so in a more complicated way by 
+  considering a weighted sum of every permutation of features 
+  being used. So for a model with features a, b, and c, shapely 
+  would calc 
+  
+  accuracy(a)
+  accuracy(a,b)
+  accuracy(a,b,c)
+  accuracy(a,c)
+  accuracy(b)
+  accuracy(b,c)
+  accuracy(c)
+  
+  This creates O(2^n) different combinations to run through the
+  model where each combination takes time to score the entire 
+  dataset. This is not feasable so I used a shapely value sampler
+  which generates a random order (acb) and then tries:
+  
+  accuracy(a)
+  accuracy(ac)
+  accuracy(acb)
+
+  It does this sampling 'n' times so it samples n*f where f is the 
+  number of features. This is a common way to estimate shapely values
+
+  returns a dictionary with {feature_name: value}
+  """
+  
   importance = {}
 
   ox_train, oy_train, ox_test, oy_test, df, maxes = get_data(col_info, file_name, seq_length, train_prop)
@@ -174,7 +220,8 @@ def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, superv
   # getting accuracy with all features as a baseline
   #printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=train_prop, subset_by_label=-1, whole_seq_bad=True, verbose=False
   x_train, y_train, x_test, y_test, df, maxes = get_data(col_info, file_name, seq_length, train_prop)
-  print(f"x shape in Shapely train: {x_train.shape}, val: {x_test.shape}")
+  if verbose:
+    print(f"x shape in Shapely train: {x_train.shape}, val: {x_test.shape}")
   train_acc=0
   test_acc=0
   errors=0
@@ -191,15 +238,17 @@ def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, superv
     o_test_acc = compare_acc_unsupervised(test_errors, mean, stdv*n_stdv,y_test)
 
   for n in range(n_samps):
-    print(importance)
+    if verbose:
+      print(importance)
     
     # create a random ordering of the features and set them all to false
     train_acc = o_train_acc
     test_acc - o_test_acc
     features_permute = list(range(0,len(col_info)))
     random.shuffle(features_permute)
-    print(features_permute)
-    input(f"hit enter to increment shapely value {n}")
+    if verbose:
+      print(features_permute)
+      input(f"hit enter to increment shapely value {n}")
     for c in col_info:
       c.InfoType_used = False
     # we always want the label to be true  
@@ -222,17 +271,22 @@ def Shapely(model, col_info, get_data, seq_length, train_prop, file_name, superv
         temp_test_errors, _1, _2 = get_errors(model, x_test)
         temp_train_acc = compare_acc_unsupervised(temp_errors, mean, stdv*n_stdv,y_train)
         temp_test_acc = compare_acc_unsupervised(temp_test_errors, mean, stdv*n_stdv,y_test)
-      for c in col_info:
-        print(f"name: {c.InfoType_name}, used: {c.InfoType_used}")
-      print(f"Testing accuracy with {col_info[i].InfoType_name} included")
-      print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
-      print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
+      if verbose:
+        for c in col_info:
+          print(f"name: {c.InfoType_name}, used: {c.InfoType_used}")
+        print(f"Testing accuracy with {col_info[i].InfoType_name} included")
+        print(f"Accuracy on train: {temp_train_acc}, change in accuracy: {temp_train_acc - train_acc}")
+        print(f"Accuracy on test: {temp_test_acc}, change in accuracy: {temp_test_acc - test_acc}")
       importance[col_info[i].InfoType_name] = importance.get(col_info[i].InfoType_name,0)+(temp_train_acc - train_acc + temp_test_acc - test_acc)/2.0
       train_acc = temp_train_acc
       test_acc = temp_test_acc
-  names = list(importance.keys())
-  values = list(importance.values())
 
-  plt.bar(range(len(importance)), values, tick_label=names)
-  plt.xticks(rotation = 45)
-  plt.show()
+  if graph_output:
+    names = list(importance.keys())
+    values = list(importance.values())
+
+    plt.bar(range(len(importance)), values, tick_label=names)
+    plt.xticks(rotation = 45)
+    plt.show()
+
+  return importance
