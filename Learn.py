@@ -7,8 +7,9 @@ from Interpretability import compare_acc
 
 def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_prop = 0.8, units=100, epochs=5, model=None, verbose=False):
   """
-  Creates a bastic LSTM which learns to classify data as malicious or not
-  based on labeled data. 
+  Creates a basic LSTM which learns to classify data as malicious or not
+  based on labeled data. A worse version of Alex's model from a long time 
+  ago. 
 
   Inputs: 
     seq_length: in order to train in parallel, the model is set to stateless and
@@ -56,6 +57,37 @@ def supervised_learn(x_train, y_train, x_test, y_test, seq_length = 30, train_pr
   return model, history, train_acc, test_acc
 
 def unsupervised_learn(x_train, x_val, x_test, seq_length=10, units=[64,64], epochs=100, model=None):
+  """
+  This function trains an auto encoder model on training data and 
+  also optionally records the loss on validation data and test data.
+  The reason for separating validation and test is so that the test
+  data may be malicious packets in order to get an idea of the cutoff
+  to be used for reconstruction error.
+
+  Inputs: 
+    x_train: numpy array of numerical input of shape 
+             [n-seq_length, seq_length, num_features]
+             This is not a data frame, this is the input
+             constructed from the data frame using DataLoader's
+             'make_supervised_sequence' function
+    x_val:   Same thing but validation data
+    x_test:  Same thing but these are sequences ending in 
+             malicious packets. 
+    seq_length: How long of a sequence should the LSTM learn
+                longer sequences may require more recurrent
+                units in order to encode properly.
+    units: list of length 2 [n_encoder_units, n_decoder_units]
+    epochs: How long to train
+    model: a pretrained autoencoder LSTM in the case of fine 
+           tuning / transfer learning. 
+
+  Ouptuts:
+    model: The trained LSTM. 
+    train_l, val_l, test_l: the loss recorder at each epoch
+                            for train, val, and test data. 
+                            We hope to see high test error
+  """
+  
   print("Now performing unsupervised learning")
   print(f"x train shape: {x_train.shape}, x val shape: {x_val.shape}, x test shape: {x_test.shape} ")
   #input("Hit enter to train")

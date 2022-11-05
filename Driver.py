@@ -117,12 +117,22 @@ def modbus_unsupervised(model=None, train_l=None, val_l=None, test_l=None, lime=
   goodpacs = np.where(train_y<1)[0] # get known packets from train
   goodpacs2 = np.where(val_y<1)[0] # get known packets from val
 
+  print(f"badpacks length: {badpacs.shape + badpacs2.shape}")
 
   test_x = np.concatenate((train_x[badpacs], val_x[badpacs2]), axis=0)
   train_x = train_x[goodpacs]
   val_x = val_x[goodpacs2]
 
-  print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.shape}")
+  print(f"shapes, train_x: {train_x.shape}, test_x: {test_x.shape}, val_x: {val_x.shape} using old method")
+
+  train_x, train_y, val_x, val_y, df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=train_prop, subset_by_label=0, whole_seq_bad=False, verbose=True)
+  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
+  print(f"subset by label =0: x shape train: {train_x.shape}, val: {val_x.shape}")
+  train_x, train_y, val_x, val_y, df, maxes = get_modbus_data(moving_two_files_cols, "moving_two_files_modbus_6RTU", seq_length, train_prop=1.0, subset_by_label=1, whole_seq_bad=False, verbose=True)
+  #test_x, _3, _4, _5, df_test, maxes = get_printer_data(printer_cols, "Data/PrinterPackets.csv", seq_length, train_prop=1.0, subset_by_label=1, maxes=maxes, verbose=False)
+  print(f"subset by label =1: x shape train: {train_x.shape}, val: {val_x.shape}")
+
+  input("Did it work?")
 
   model, train_l, val_l, test_l = unsupervised_learn(train_x,val_x,test_x, seq_length, [64,64], 100, model=model)
   unsupervised_results(model, train_x, test_x, train_l, val_l, test_l)

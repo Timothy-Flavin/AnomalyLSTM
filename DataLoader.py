@@ -24,7 +24,7 @@ class InfoType:
       InfoType_name -> the name of this data such as 
                        'ethernet_dst' or 'len'. if data
                        is read as a dataframe, this name
-                       should match the column
+                       should match the column name
       InfoType_length -> the length of this data based on 
                          the way it will be encoded for the
                          model. so ip to numpy saves a value
@@ -299,6 +299,9 @@ def make_supervised_sequence(data, seq_len, whole_seq_bad=False):
 
 def get_modbus_data(cols, file_name, seq_length, train_prop, subset_by_label=-1, maxes=None, supervised=True, whole_seq_bad = False, verbose=False):
   """
+  Fernandez synthetic dataset data loader. ignore this or see 'get_printer_data'
+  for more info.
+
   subset_by_label means that we will get only the data with the desired label
   This is so we can test the unsupervised learner by training it to encode and
   decode normal data and then compare it's ability to decode with that of the 
@@ -307,21 +310,38 @@ def get_modbus_data(cols, file_name, seq_length, train_prop, subset_by_label=-1,
   """
   data_frame = modbus_to_data_frame(file_name)
 
-  if subset_by_label == 1:
-    data_frame = data_frame.loc[data_frame.iloc[:,-1] == 1]
-    if verbose:
-      print("Getting only data with label 1")
-      print(data_frame.head)
-  if subset_by_label == 0:
-    data_frame = data_frame.loc[data_frame.iloc[:,-1] == 0]
-    if verbose:
-      print("Getting only data with label 0")
-      print(data_frame.head)
-
   data = join_columns(data_frame,cols)
   #print(f"Printing modbus data: {data}")
   data, maxes = max_normalize(data, maxes)
   seq_data, seq_labels = make_supervised_sequence(data, seq_length)
+
+  if subset_by_label == 1:
+    if verbose:
+      print("Getting only data with label 1")
+      print(f"seq data shape before: {seq_data.shape}")
+    # used > 0 instead of == 1 because I was nervous
+    # about float to int comparison
+    print(f"Seq labels: {seq_labels}, sum: {np.sum(seq_labels)}")
+    print(f"np where sl > 0: {np.where(seq_labels>0)[0]}")
+    good_pac_idx = np.where(seq_labels>0)[0]
+    seq_data = seq_data[good_pac_idx]
+    seq_labels = seq_labels[good_pac_idx]
+    # data_frame = data_frame.loc[data_frame.iloc[:,-1] == 1]
+    if verbose:
+      print(f"seq data shape after: {seq_data.shape}")
+      print(f"seq labels: {seq_labels}") 
+  if subset_by_label == 0:
+    if verbose:
+      print("Getting only data with label 0")
+      print(f"seq data shape before: {seq_data.shape}")
+    #seq_data = seq_data[np.where(seq_labels<1)[0]]
+    #data_frame = data_frame.loc[data_frame.iloc[:,-1] == 0]
+    bad_pac_idx = np.where(seq_labels<1)[0]
+    seq_data = seq_data[bad_pac_idx]
+    seq_labels = seq_labels[bad_pac_idx]
+    if verbose:
+      print(f"seq data shape after: {seq_data.shape}")
+      print(f"seq labels: {seq_labels}")  
 
   x_train = seq_data[:int(train_prop*seq_data.shape[0]),:,:]
   x_test = seq_data[int(train_prop*seq_data.shape[0]):,:,:]
@@ -330,19 +350,55 @@ def get_modbus_data(cols, file_name, seq_length, train_prop, subset_by_label=-1,
 
   return x_train, y_train, x_test, y_test, data_frame, maxes
 
-def get_printer_data(cols, file_name, seq_length, train_prop, subset_by_label=-1, maxes=None, whole_seq_bad=False, verbose=False):
-  data_frame, skipped = read_printer_as_df(file_name)
+def get_printer_data(cols, file_name, seq_length, train_prop, subset_by_label=-1, maxes=None, whole_seq_bad=False, df=None, verbose=False):
+  """
+  This data loader uses a list of 'InfoType's along with some other
+  information to read the csv file for the 3d printer unknown IP
+  data into a dataframe. It then normaizes that data and creates
+  batches for training of a stateful LSTM model. 
 
-  if subset_by_label == 1:
-    data_frame = data_frame.loc[data_frame.iloc[:,-1] == 1]
-    if verbose:
-      print("Getting only data with label 1")
-      print(data_frame.head)
-  if subset_by_label == 0:
-    data_frame = data_frame.loc[data_frame.iloc[:,-1] == 0]
-    if verbose:
-      print("Getting only data with label 0")
-      print(data_frame.head)
+  Inputs:
+    cols: list of 'InfoTypes' to tell this function what to pull 
+          from the csv and how to handle it
+    file_name: relative path or full path
+    seq_length: length of the sliding window that will be used to 
+                create batches of packets for the model to train.
+                Should be the same length as the model parameter
+                in 'Learn.py'
+    train_prop: 0.0 to 1.0 proportion of the data to be used as 
+                training data
+    subset_by_label: if this is either 0 or 1, this function will 
+                     only retain sequences where the label is equal
+                     to 'subset_by_label'
+    maxes: This function uses max normalization and the maximum 
+           value for each column can be passed to this funciton
+           as an argument in the case that the maxes were taken
+           from another dataset and we want this data to be scaled
+           the same way
+    whole_seq_bad: When choosing which data to give the model,
+                   we can either label any sequences ending in
+                   a maliciously labeled packet as 1, or we can
+                   label any sequences containing that packet as 1.
+                   We do the latter if whole_seq_bad = True
+    verbose: set this to true if you want it to print some debug stuff
+
+  Outputs:
+    x_train: the numpy array of sequences that the model will use
+             to train. first 'train_prop'*100% of the data
+    y_train: the labeling of whether or not a sequence of packets
+             is malicious in case 'subset_by_label' is not used. 
+    x_test:  the last (1.0-train_prop) *100 % of the data    
+    y_test:  the labels of x_test
+    data_frame: df if df != None, otherwise the data frame result 
+                from DataLoader's 'read_printer_as_df'
+    maxes: returns the maxes used in this max normalization in case
+           they are needed again. 
+  """
+  data_frame = df
+  if data_frame is None:
+    data_frame, skipped = read_printer_as_df(file_name)
+
+  
 
   data = join_columns(data_frame,cols)
   #print(f"Printing modbus data: {data}")
@@ -353,6 +409,34 @@ def get_printer_data(cols, file_name, seq_length, train_prop, subset_by_label=-1
   #print(seq_data.shape)
   #print(seq_data[0,0:10,0:10])
   #input("Is this the right shape?")
+  if subset_by_label == 1:
+    if verbose:
+      print("Getting only data with label 1")
+      print(f"seq data shape before: {seq_data.shape}")
+    # used > 0 instead of == 1 because I was nervous
+    # about float to int comparison
+    print(f"Seq labels: {seq_labels}")
+    print(f"np where sl > 0: {np.where(seq_labels>0)[0]}")
+    good_pac_idx = np.where(seq_labels>0)[0]
+    seq_data = seq_data[good_pac_idx]
+    seq_labels = seq_labels[good_pac_idx]
+    # data_frame = data_frame.loc[data_frame.iloc[:,-1] == 1]
+    if verbose:
+      print(f"seq data shape after: {seq_data.shape}")
+      print(f"seq labels: {seq_labels}") 
+  if subset_by_label == 0:
+    if verbose:
+      print("Getting only data with label 0")
+      print(f"seq data shape before: {seq_data.shape}")
+    #seq_data = seq_data[np.where(seq_labels<1)[0]]
+    #data_frame = data_frame.loc[data_frame.iloc[:,-1] == 0]
+    bad_pac_idx = np.where(seq_labels<1)[0]
+    seq_data = seq_data[bad_pac_idx]
+    seq_labels = seq_labels[bad_pac_idx]
+    if verbose:
+      print(f"seq data shape after: {seq_data.shape}")
+      print(f"seq labels: {seq_labels}")      
+
 
   x_train = seq_data[:int(train_prop*seq_data.shape[0]),:,:]
   x_test = seq_data[int(train_prop*seq_data.shape[0]):,:,:]
